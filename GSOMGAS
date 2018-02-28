@@ -1,164 +1,206 @@
 import numpy as np
-from sklearn.datasets import make_swiss_roll, make_s_curve
+from sklearn.datasets import make_swiss_roll, make_s_curve,make_blobs,load_digits
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-X, t = make_s_curve(n_samples=500, random_state=100)#make_swiss_roll(n_samples=500,random_state=10)
+data = load_digits()
 
+# X, colors = load_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#make_swiss_roll(n_samples=500,random_state=10)
+X = data.data
+X/=X.max()
+colors = data.target
 W = np.random.random((3, X.shape[1]))
 Y = np.random.random((3, 2))
 
 G = np.zeros((W.shape[0], W.shape[0]))
 errors = np.zeros(3)
-amax =1
+a_max =1
 ages = np.zeros(G.shape)
 
-lrst = 0.8
+hits = np.zeros(G.shape[0])
+
+lrst = 0.1
 alpha = 0.4
-for i in range(100):
-    print '\riteration ', i+1, ' n(G) = ', G.shape[0],
+maxiter = 15
+for i in range(maxiter):
+
     for x in X:
-        lr = lrst*np.exp(-.5*i**2/50.**2)
-        k = np.argmin(np.linalg.norm(W-x, axis=1))
-        l, m = np.argsort(np.linalg.norm(Y[k]-Y, axis=1))[1:3]
+        print '\r iteration : ', i, ' : n(G) : ', G.shape[0],
+        dists = np.linalg.norm(W - x, axis=1)
+        s, t, u = np.argsort(dists)[:3]
+        lr = np.exp(0.5*i**2*1./maxiter**2) * lrst
+        try:
+            errors[s] += dists[s] ** 2
+        except:
+            np.append(errors, dists[s] ** 2)
 
-        hneis = np.argsort(np.linalg.norm(W[k]-W, axis=1))[1:3]
+        neis = np.where(G[s])[0]
+        D = dists[neis]
+        d = np.linalg.norm(Y[neis]-Y[s], axis=1)
+        if d.shape[0]:
+            d/= d.max()
 
-        G[k][l]=1
-        G[l][k]=1
-        G[m][k]=1
-        G[k][m]=1
-        # G[l][m]=1
-        # G[m][l]=1
-        # if not np.in1d(hneis, l).any() :
-        #     G[k][l]=0
-        #     G[l][k]=0
-        #
-        # if not np.in1d(hneis, m).any() :
-        #     G[k][m] =0
-        #     G[m][k]=0
-        #
+        lamb = np.nan_to_num(np.array([np.exp(-0.5*d**2)]).T)
+        if lamb.sum() :
+            lamb /= lamb.sum()
+        lamb = np.nan_to_num(lamb)
+        W[neis] += lr * (x - W[neis])*lamb
+        W[s] += lr * (x - W[s])
+        hits[s]+=1
 
-        # ages[l][m] = 0
-        # ages[m][l] = 0
-
-        err = np.linalg.norm(x-W[k])
-        W[k] += (x - W[k])*lr
-
-        neis = np.where(G[k] == 1)[0]
-        non_neis = np.setdiff1d(np.array(range(Y.shape[0])), neis)#np.array(range(Y.shape[0]))
-
-        ages[k][neis] +=1
-        ages[neis][:,k] +=1
-        # if np.in1d(hneis, l).any():
-        ages[k][l] = 0
-        ages[l][k] = 0
-        # if np.in1d(hneis, m).any():
-        ages[m][k] = 0
-        ages[k][m] = 0
-
-        d = np.linalg.norm(W[k]-W[neis], axis=1)
-        d_n = np.linalg.norm(W[k]-W[non_neis], axis=1)
-        if neis.shape[0]==0:
-            continue
-        d /= d.max()
-        d_n /= d_n.max()
-
-        theta = np.nan_to_num(np.array([np.exp(-0.5*d**2)]).T)
-        theta = np.nan_to_num(theta/theta.max())
-
-        theta_n = np.nan_to_num(np.array([1./d_n]).T)#np.nan_to_num(np.array([np.exp(-.5*d_n**2)]).T)
-        theta_n = np.nan_to_num(theta_n/theta_n.max())
-        push = (Y[k]-Y[non_neis])*theta_n
-
-        W[neis] += (W[k]-W[neis])*lr*theta
+        # Move Y
 
 
+        ages[s] += G[s]
+        ages[s][s] = 0
 
-        Dw = np.linalg.norm(W[neis]-W[k], axis=1)
-        dy = np.linalg.norm(Y[neis]-Y[k], axis=1)
+        G[s][ages[s] > a_max] = 0
+        G[:, s][ages[s] > a_max] =0
+        ages[s][ages[s] > a_max] = 0
+        ages[:, s][ages[s] > a_max] =0
+        if G[s][t]:
+            ages[s, t] = 0
+            ages[t, s] = 0
+        else:
+            G[s][t] = 1
+            G[t][s] = 1
+            ages[s][t] = 0
+            ages[t][s] =0
 
-        dirs = dy - Dw
-        pull = np.array([dirs]).T * (Y[k]-Y[neis]) * lr * theta
+        if not G[s][u]:
+            G[s][u]=1
+            G[u][s]=1
+        ages[s][u]=0
+        ages[u][s]=0
 
-        if np.isnan(pull).any() or np.isinf(pull).any():
-            print 'hold'
+        if not G[u][t]:
+            G[u][t]=1
+            G[t][u]=1
 
-        Y[neis] += pull
-
-
-        # Y[neis] += (Y[k]-Y[neis])*lr*theta
-        if np.isnan(push).any() or np.isinf(push).any():
-            print 'hold'
-        Y[non_neis] -= push
-
-        errors[k] += err**2
-
-        ### Growth ####
-
-        if errors[k] >= 10:
-            errors[k]*= alpha
-            errors[neis] += errors[neis]*alpha
-
-            W_n = W[l] + W[m] + W[k]
-            W_n /= 3.
-            W_n = 2*W[k] - W_n
-
-            Y_n = Y[l] + Y[m] + Y[k]
-            Y_n /= 3.
-
-            Y_n = 2*Y[k] - Y_n
-
-            W = np.concatenate((W,np.array([W_n])), axis=0)
-            Y = np.concatenate((Y, np.array([Y_n])), axis=0)
-
-            errors = np.concatenate((errors, np.array([0])))
-
-            G = np.concatenate((G, np.zeros((G.shape[0], 1))), axis=1)
-            G = np.concatenate((G, np.zeros((G.shape[1], 1)).T), axis=0)
-
-            ages = np.concatenate((ages, np.zeros((ages.shape[0], 1))), axis=1)
-            ages = np.concatenate((ages, np.zeros((ages.shape[1], 1)).T), axis=0)
+        ages[u][t]=0
+        ages[t][u]=0
 
 
-        ### edge deletion ###
+        if i % 10 == 0 and i < 9000:
+            if errors[s] > 10:
+                try:
+                    ninds = np.where(G[s]==1)[0]
+                    l, m = np.argsort(errors[ninds])[:3]
+                except ValueError:
+                    continue
+                W_n = W[ninds[l]] + W[s] + W[ninds[m]]
+                W_n /= 3.
 
-        G[k][ages[k] > amax] = 0
-        ages[k][ages[k] > amax] = 0
-        G[:, k][ages[:,k] > amax] = 0
-        ages[:, k][ages[:, k] > amax] = 0
+                Y_n = Y[ninds[l]] + Y[s] + Y[ninds[m]]
+                Y_n /= 3.
 
-    ### node deletion ###
+                errors[l] *= alpha
+                errors[s] *= alpha
+                W = np.concatenate((W, np.array([W_n])), axis=0)
+                Y = np.concatenate((Y, np.array([Y_n])), axis=0)
+                G = np.concatenate((G, np.array([np.zeros(G.shape[0])])), axis=0)
+                G = np.concatenate((G, np.array([np.zeros(G.shape[0])]).T), axis=1)
+                ages = np.concatenate((ages, np.array([np.zeros(ages.shape[0])])), axis=0)
+                ages = np.concatenate((ages, np.array([np.zeros(ages.shape[0])]).T), axis=1)
+                errors = np.append(errors, 0)
+                hits = np.append(hits, 0)
 
-    delcands = np.where(G.sum(axis=1)<=1)[0]
+                #move y
+                for _ in range(50):
+                    for p in range(Y.shape[0]):
+                        y_neis = np.where(G[p] == 1)[0]
 
-    ages = np.delete(ages, delcands, axis=0)
-    ages = np.delete(ages,delcands, axis=1)
-    G = np.delete(G, delcands, axis=0)
-    G= np.delete(G, delcands, axis=1)
-    Y = np.delete(Y, delcands, axis=0)
-    W = np.delete(W, delcands, axis=0)
-    errors = np.delete(errors, delcands)
+                        oths = np.where(G[p] == 0)[0]  # np.array(range(G.shape[0]))#
+
+                        d_oths = np.linalg.norm(Y[oths] - Y[p], axis=1)
+
+                        pushdirs = np.array([np.exp(-d_oths)]).T  * 50
+                        # pushdirs /= pushdirs.min()
+
+                        push = (Y[oths] - Y[p]) * pushdirs
+
+                        Y[oths] += push
+
+                        Y[p] += lr * (Y[y_neis] - Y[p]).sum(axis=0)
 
 
+    emptyNodes = np.where(G.sum(axis=0)<=1)
 
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(X.T[0], X.T[1],X.T[2], c=t, cmap=plt.cm.hsv, alpha=0.2)
-ax.scatter(W.T[0], W.T[1],W.T[2], c=range(W.shape[0]), cmap=plt.cm.hsv, alpha=0.8)
+    W = np.delete(W, emptyNodes, axis=0)
+    Y = np.delete(Y, emptyNodes, axis=0)
+    G = np.delete(G, emptyNodes, axis=0)
+    G = np.delete(G, emptyNodes, axis=1)
+    ages = np.delete(ages,emptyNodes,axis=0)
+    ages = np.delete(ages,emptyNodes,axis=1)
+    errors = np.delete(errors, emptyNodes)
+    hits = np.delete(hits, emptyNodes)
+
+    # if i % 2 == 1:
+    #     for _ in range(1):
+    #         for p in range(Y.shape[0]):
+    #             y_neis = np.where(G[p] == 1)[0]
+    #
+    #             oths =  np.where(G[p] == 0)[0]#np.array(range(G.shape[0]))#
+    #
+    #             d_oths = np.linalg.norm(Y[oths] - Y[p], axis=1)
+    #
+    #             pushdirs = np.array([np.exp(-d_oths)]).T# * 10
+    #             # pushdirs /= pushdirs.min()
+    #
+    #             push = (Y[oths] - Y[p]) * pushdirs
+    #
+    #             Y[oths] += push
+    #
+    #             Y[p] += 0.01 * (Y[y_neis] - Y[p]).sum(axis=0)
+
+# Map Correction
+print '\n'
+for _ in range(1000):
+    for p in range(Y.shape[0]):
+        print '\rcorrecting:, ',_,
+        y_neis = np.where(G[p] == 1)[0]
+
+        oths = np.array(range(G.shape[0]))#np.where(G[p] == 0)[0]
+
+        d_oths = np.linalg.norm(Y[oths] - Y[p], axis=1)
+        # d_oths = d_oths/d_oths.sum()
+        pushdirs = np.array([np.exp(-d_oths)]).T * 20
 
 
-for i in range(G.shape[0]):
-    for j in range(G.shape[1]):
-        if G[i, j]:
-            ax.plot([W[i, 0], W[j, 0]], [W[i, 1], W[j, 1]],[W[i,2], W[j,2]], c='black')
+        push = (Y[oths] - Y[p])* pushdirs
 
-plt.show()
+        Y[oths] += push
 
-plt.scatter(Y.T[0], Y.T[1], c=range(Y.shape[0]), cmap= plt.cm.hsv, alpha = 0.4)
+
+        Y[p] += 0.05*(Y[y_neis]-Y[p]).sum(axis=0)
+# print ages.max()
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# ax.scatter(X.T[0], X.T[1],X.T[2], c=colors, cmap=plt.cm.hsv, alpha=0.2)
+# ax.scatter(W.T[0], W.T[1],W.T[2], c='black', alpha=0.8)
+#
+#
+# for i in range(G.shape[0]):
+#     for j in range(G.shape[1]):
+#         if G[i, j]:
+#             ax.plot([W[i, 0], W[j, 0]], [W[i, 1], W[j, 1]],[W[i,2], W[j,2]], c='black')
+#
+# plt.show()
+# # #
+plt.scatter(Y.T[0], Y.T[1], c='black', alpha = 0.4)
 
 for i in range(G.shape[0]):
     for j in range(G.shape[1]):
         if G[i, j]:
             plt.plot([Y[i, 0], Y[j, 0]], [Y[i, 1], Y[j, 1]], c='black')
+plt.show()
+# #
+predictions =[]
+
+for x in X:
+    predictions.append(Y[np.argmin(np.linalg.norm(W-x, axis=1))])
+
+disp = np.array(predictions)
+
+plt.scatter(disp.T[0], disp.T[1], c=colors, cmap=plt.cm.hsv, alpha = 0.4)
 plt.show()
