@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 #
-# X, colors = make_swiss_roll(n_samples=1000,random_state=10)#oad_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#
-
-data = load_digits()
+X, colors = make_swiss_roll(n_samples=1000,random_state=10)#oad_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#
 #
-X = data.data
+# data = load_digits()
+
+# X = data.data
 # X/=X.max()
-colors = data.target
+# colors = data.target
 
 
 W = np.random.random((3, X.shape[1]))

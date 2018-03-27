@@ -3,42 +3,51 @@ from sklearn.datasets import make_swiss_roll, make_s_curve,make_blobs,load_digit
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-def t_dist(d, n=1.0):
+def t_dist(d, n=4.50):
     dists= np.power((1+d**2), -n)
     return dists/dists.sum()
 #
-X, colors = make_swiss_roll(n_samples=1000,random_state=10)#oad_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#
-
-# data =load_digits()
+# X, colors = make_swiss_roll(n_samples=1000,random_state=10)#oad_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#
 #
-# X = data.data
-# colors = data.target
+data =load_digits()
+
+X = data.data
+colors = data.target
 #
 intdim = 3
+
+g_max = 10000
 
 W = np.random.random((intdim, X.shape[1]))
 Y = np.random.random((intdim, 2))
 
 G = np.zeros((W.shape[0], W.shape[0]))
 errors = np.zeros(intdim)
-a_max_st =3
+gens = np.zeros(intdim)
+a_max_st = 3
 ages = np.zeros(G.shape)
 
 hits = np.zeros(G.shape[0])
 
 lrst = 0.1
-alpha = 0.02
-maxiter = 15
+alpha = 0.05
+maxiter = 250
 D = X.shape[1]
-sf = 0.01
-GT = -np.log(sf) * D
 
+QE =[]
+NG =[]
+GTs =[]
 print 'Graph Dimensionality : ', intdim
 
 for i in range(maxiter):
     a_max = 2#(a_max_st*(1 - i * 1. / maxiter))
 
-    struct_change = (i%5==1)
+    sf = 0.8
+    GT = -np.log(sf) * X.shape[0] * np.exp(-3.*i/maxiter)
+    GTs.append(GT)
+    QE.append(errors.sum())
+    NG.append(G.shape[0])
+    struct_change = (i%25==1)
 
     for x in X:
         print '\r iteration : ', i, ' : n(G) : ', G.shape[0],
@@ -122,7 +131,7 @@ for i in range(maxiter):
 
         if struct_change :
             print ' creating new node, ',
-            if errors[s] > GT**2:
+            if errors[s] > GT**2:# and gens[s] < g_max:
                 try:
                     ninds = np.where(G[s]==1)[0]
                     h_er_ixs= ninds[np.argsort(errors[ninds])][:intdim]
@@ -140,6 +149,8 @@ for i in range(maxiter):
 
                 errors[h_er_ixs] *= alpha
                 errors[s]*= alpha
+                gens[s] += 1
+                gens[h_er_ixs] +=1
                 W = np.concatenate((W, np.array([W_n])), axis=0)
                 Y = np.concatenate((Y, np.array([Y_n])), axis=0)
                 G = np.concatenate((G, np.array([np.zeros(G.shape[0])])), axis=0)
@@ -150,36 +161,37 @@ for i in range(maxiter):
                 ages = np.concatenate((ages, np.array([np.zeros(ages.shape[0])]).T), axis=1)
                 errors = np.append(errors, errors[s])
                 hits = np.append(hits, 0)
+                gens = np.append(gens, 0)
 
                 #move y
-        move_range = 0
-        if struct_change: move_range = 0
-        print ' moving all nodes in graph, ',
-        for _ in range(move_range):
-            for p in range(Y.shape[0]):
-            # p = s
-                d = np.linalg.norm(Y-Y[p], axis=1)
+    move_range = 0
+    if struct_change: move_range = 20
+    print ' moving all nodes in graph, ',
+    for _ in range(move_range):
+        for p in range(Y.shape[0]):
+        # p = s
+            d = np.linalg.norm(Y-Y[p], axis=1)
 
-                y_neis = np.where(G[p] == 1)[0]
+            y_neis = np.where(G[p] == 1)[0]
 
-                oths = np.where(G[p] == 0)[0]  # np.array(range(G.shape[0]))#
+            oths = np.where(G[p] == 0)[0]  # np.array(range(G.shape[0]))#
 
-                d_oths = d[oths]#np.linalg.norm(Y[oths] - Y[p], axis=1)
+            d_oths = d[oths]#np.linalg.norm(Y[oths] - Y[p], axis=1)
 
-                # pushdirs = np.array([np.exp(-d_oths)]).T  * 250
-                pushdirs = np.array([t_dist(d_oths)]).T # * 5
-                # pushdirs /= pushdirs.min()
-                # pushdirs /= pushdirs.sum()
+            # pushdirs = np.array([np.exp(-d_oths)]).T  * 250
+            pushdirs = np.array([t_dist(d_oths)]).T # * 5
+            # pushdirs /= pushdirs.min()
+            pushdirs /= pushdirs.sum()
 
-                push = (Y[oths] - Y[p]) * pushdirs
+            push = (Y[oths] - Y[p]) * pushdirs
 
-                Y[oths] += push * lr
+            Y[oths] += push #* lr
 
-                pulldirs = np.array([(d[y_neis])]).T
-                if pulldirs.sum():
-                    pulldirs /= pulldirs.sum()
+            pulldirs = np.array([(d[y_neis])]).T
+            if pulldirs.sum():
+                pulldirs /= pulldirs.sum()
 
-                Y[p] += 0.1 * ((Y[y_neis] - Y[p])*pulldirs).sum(axis=0)*lr
+            Y[p] += 0.01 * ((Y[y_neis] - Y[p])*pulldirs).sum(axis=0)#*lr
 
     if struct_change or i==maxiter-1:
         emptyNodes = np.where((G.sum(axis=0) <= intdim - 2))  # | ( hits<=1))
@@ -197,27 +209,27 @@ for i in range(maxiter):
             emptyNodes = np.where((G.sum(axis=0) <= intdim - 2))  # | ( hits<=1))
 
 # Map Correction
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(X.T[0], X.T[1],X.T[2], c=colors, cmap=plt.cm.hsv, alpha=0.2)
-ax.scatter(W.T[0], W.T[1],W.T[2], c='black', alpha=0.8)
-
-
-for i in range(G.shape[0]):
-    for j in range(G.shape[1]):
-        if G[i, j]:
-            ax.plot([W[i, 0], W[j, 0]], [W[i, 1], W[j, 1]],[W[i,2], W[j,2]], c='black')
-
-plt.show()
+#
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# ax.scatter(X.T[0], X.T[1],X.T[2], c=colors, cmap=plt.cm.hsv, alpha=0.2)
+# ax.scatter(W.T[0], W.T[1],W.T[2], c='black', alpha=0.8)
+#
+#
+# for i in range(G.shape[0]):
+#     for j in range(G.shape[1]):
+#         if G[i, j]:
+#             ax.plot([W[i, 0], W[j, 0]], [W[i, 1], W[j, 1]],[W[i,2], W[j,2]], c='black')
+#
+# plt.show()
 
 print '\n'
-for _ in range(3000):
+for _ in range(2000):
     for p in range(Y.shape[0]):
         print '\rcorrecting:, ',_,
         y_neis = np.where(G[p] == 1)[0]
 
-        oths = np.array(range(G.shape[0]))#np.where(G[p] == 0)[0]
+        oths =np.where(G[p] == 0)[0]# np.array(range(G.shape[0]))#
         d = np.linalg.norm(Y-Y[p], axis=1)
         d_oths = d[oths]#np.linalg.norm(Y[oths] - Y[p], axis=1)
         # d_oths = d_oths/d_oths.sum()
@@ -226,8 +238,8 @@ for _ in range(3000):
 
 
         pulldirs = np.array([(d[y_neis])]).T
-
-        pulldirs /= pulldirs.sum()
+        if pulldirs.sum():
+            pulldirs /= pulldirs.sum()
 
         push = (Y[oths] - Y[p])* pushdirs * np.exp(-.5*_**2/1000.**2)#*0.2
 
@@ -254,5 +266,15 @@ for x in X:
 
 disp = np.array(predictions)
 
-plt.scatter(disp.T[0], disp.T[1], c=colors, cmap=plt.cm.hsv, alpha = 0.2, s=16)
+plt.scatter(disp.T[0], disp.T[1], c=colors, cmap=plt.cm.hsv, alpha = 0.2, s=16, edgecolors=None)
+plt.show(block=False)
+fig3 = plt.figure()
+t = range(len(QE))
+plt.plot(t, QE)
+plt.show()
+fig4 = plt.figure()
+plt.plot(t, GTs)
+plt.show()
+fig5 = plt.figure()
+plt.plot(t, NG)
 plt.show()
