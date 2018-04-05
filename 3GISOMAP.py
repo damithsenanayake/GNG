@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.datasets import make_swiss_roll, make_s_curve, make_blobs, load_digits, fetch_olivetti_faces
 import matplotlib.pyplot as plt
+from sklearn.manifold import MDS
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -9,7 +10,23 @@ def t_dist(d, n=1.5):
     dists = np.power((1 + d ** 2), -n)
     return dists / dists.sum()
 
-
+def frw(W, G):
+    print '\r running frw',
+    D = np.zeros(G.shape)
+    D.fill(np.inf)
+    n = G.shape[0]
+    for i in range(n):
+        for j in range(n):
+            if G[i][j]:
+                D[i][j] = np.linalg.norm(W[i]-W[j])
+            elif i==j:
+                D[i][j] = 0
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                if D[i][j] > D[i][k] + D[k][j]:
+                    D[i][j] = D[i][k] + D[k][j]
+    return np.nan_to_num(D)
 #
 # X, colors = make_swiss_roll(n_samples=1000,random_state=10)#oad_digits()#make_blobs(n_samples=1000, n_features=3, centers=4, random_state=5)#
 #
@@ -23,7 +40,6 @@ intdim = 3
 g_max = 10000
 
 W = np.random.random((intdim, X.shape[1]))
-Y = np.random.random((intdim, 2))
 
 G = np.zeros((W.shape[0], W.shape[0]))
 errors = np.zeros(intdim)
@@ -35,7 +51,7 @@ hits = np.zeros(G.shape[0])
 
 lrst = 0.9
 alpha = 0.01
-maxiter = 500
+maxiter = 100
 D = X.shape[1]
 
 QE = []
@@ -45,12 +61,12 @@ print 'Graph Dimensionality : ', intdim
 for i in range(maxiter):
     a_max = 2 # -(i%2==0)# (a_max_st*(1 - i * 1. / maxiter))
     wd = 0.0025
-    sf = 0.2
+    sf = 0.1
     GT = -np.log(sf) * X.shape[1] * np.exp(-7.5 * (1. * i) **6 / maxiter ** 6)
     GTs.append(GT)
     QE.append(errors.sum())
     NG.append(G.shape[0])
-    struct_change = (i % 35 == 0)
+    struct_change = (i % 9 == 0)
     errors.fill(0)
     for x in X:
         print '\r iteration : ', i, ' : n(G) : ', G.shape[0],
@@ -69,7 +85,7 @@ for i in range(maxiter):
 
         neis = np.where(G[s])[0]
         D = dists[neis]
-        d = np.linalg.norm(Y[neis] - Y[s], axis=1)
+        d = np.linalg.norm(W[neis] - W[s], axis=1)
         if d.shape[0] and d.max():
             d /= d.max()
 
@@ -123,17 +139,11 @@ for i in range(maxiter):
 
                     W_n = 2 * W[s] - W_n
 
-                    Y_n = Y[h_er_ixs].sum(axis=0) + Y[s]
-                    Y_n /= intdim * 1.
-
-                    Y_n = 2 * Y[s] - Y_n
-
                     errors[h_er_ixs] *= alpha
                     errors[s] *= alpha
                     gens[s] += 1
                     gens[h_er_ixs] += 1
                     W = np.concatenate((W, np.array([W_n])), axis=0)
-                    Y = np.concatenate((Y, np.array([Y_n])), axis=0)
                     G = np.concatenate((G, np.array([np.zeros(G.shape[0])])), axis=0)
                     G = np.concatenate((G, np.array([np.zeros(G.shape[0])]).T), axis=1)
                     G[s][-1] = 1
@@ -152,37 +162,12 @@ for i in range(maxiter):
     if struct_change: move_range = 50*(i**2/maxiter**2)
     if i +1 >= maxiter: move_range = 200
     print ' moving all nodes in graph, ',
-    for _ in range(move_range):
-        for p in range(Y.shape[0]):
-            # p = s
-            d = np.linalg.norm(Y - Y[p], axis=1)
 
-            y_neis = np.where(G[p] == 1)[0]
-
-            oths = np.where(G[p] == 0)[0]  # np.array(range(G.shape[0]))#
-
-            d_oths = d[oths]  # np.linalg.norm(Y[oths] - Y[p], axis=1)
-
-            # pushdirs = np.array([np.exp(-d_oths)]).T  * 250
-            pushdirs = np.array([t_dist(d_oths)]).T  # * 5
-            # pushdirs /= pushdirs.min()
-            pushdirs /= pushdirs.sum()
-
-            push = (Y[oths] - Y[p]) * pushdirs
-
-            Y[oths] += push  # * lr
-
-            pulldirs = np.array([(d[y_neis])]).T#**2
-            if pulldirs.sum():
-                pulldirs /= pulldirs.sum()
-
-            Y[p] += 0.4 * ((Y[y_neis] - Y[p]) * pulldirs).sum(axis=0)  # *lr
 
     if struct_change or i == maxiter - 1:
         emptyNodes = np.where((G.sum(axis=0) <= intdim - 2))  # | ( hits<=1))
         while emptyNodes[0].shape[0]:
             W = np.delete(W, emptyNodes, axis=0)
-            Y = np.delete(Y, emptyNodes, axis=0)
             G = np.delete(G, emptyNodes, axis=0)
             G = np.delete(G, emptyNodes, axis=1)
             ages = np.delete(ages, emptyNodes, axis=0)
@@ -208,6 +193,10 @@ for i in range(maxiter):
 
         # Y[neis] += (Y[b]- Y[neis])*0.01
 
+
+pwd = frw(W, G)
+
+Y = MDS(dissimilarity='precomputed').fit_transform(pwd)
 # # #
 fig1 = plt.figure()
 
